@@ -14,3 +14,6 @@ pandas==2.0.3  # Para análise de dados
 python-multipart==0.0.6  # Para upload de arquivos via FastAPI
 email-validator==2.0.0  # Para validação de emails
 colorama==0.4.6  # Para logs coloridos
+python-jose[cryptography]==3.3.0  # Para JWT
+passlib[bcrypt]==1.7.4  # Para hash de senhas
+ratelimit==2.2.1  # Para rate limiting

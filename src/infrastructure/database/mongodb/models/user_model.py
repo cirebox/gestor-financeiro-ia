@@ -19,12 +19,20 @@ class UserModel:
         Returns:
             Dicionário representando o usuário
         """
-        return {
+        user_dict = {
             "_id": str(user.id),
             "name": user.name,
             "email": user.email,
+            "password_hash": user.password_hash,
+            "is_active": user.is_active,
+            "is_admin": user.is_admin,
             "createdAt": user.created_at
         }
+        
+        if user.last_login:
+            user_dict["lastLogin"] = user.last_login
+            
+        return user_dict
     
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> Optional[User]:
@@ -45,7 +53,11 @@ class UserModel:
                 id=UUID(data["_id"]),
                 name=data["name"],
                 email=data["email"],
-                created_at=data["createdAt"]
+                password_hash=data["password_hash"],
+                is_active=data.get("is_active", True),
+                is_admin=data.get("is_admin", False),
+                created_at=data["createdAt"],
+                last_login=data.get("lastLogin")
             )
         except (KeyError, ValueError) as e:
             # Log do erro seria apropriado aqui

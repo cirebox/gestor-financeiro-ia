@@ -13,6 +13,7 @@ from src.infrastructure.database.repositories.mongodb_user_repository import Mon
 from src.infrastructure.analytics.analytics_service import AnalyticsService
 from src.infrastructure.nlp.nlp_service import NLPService
 from src.infrastructure.nlp.llm_service import OpenAIService
+from src.domain.entities.user import User
 from config import settings
 
 
@@ -94,3 +95,40 @@ def get_nlp_usecases(
 ):
     """Obtém uma instância dos casos de uso de NLP."""
     return NLPUseCases(nlp_service, transaction_usecases, category_usecases, analytics_usecases)
+
+# Função auxiliar para obtenção de ID do usuário a partir do objeto User
+# Será usada pelas funções que dependem do usuário autenticado
+def get_user_id_from_user(user: User) -> UUID:
+    """
+    Obtém o ID do usuário a partir do objeto User.
+    
+    Args:
+        user: Objeto User
+        
+    Returns:
+        ID do usuário
+    """
+    return user.id
+    
+# Este método foi mantido por compatibilidade, mas está marcado como obsoleto
+# Será substituído pelo sistema de autenticação JWT
+async def get_current_user_id(x_user_id: str = Header(...)):
+    """
+    Obtém o ID do usuário atual a partir do cabeçalho.
+    
+    Esta função é obsoleta e será removida em versões futuras.
+    Use a dependência get_current_active_user do módulo de autenticação.
+    
+    Args:
+        x_user_id: ID do usuário no cabeçalho X-User-ID
+        
+    Returns:
+        UUID do usuário
+    
+    Raises:
+        HTTPException: Se o ID do usuário for inválido
+    """
+    try:
+        return UUID(x_user_id)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="ID de usuário inválido")

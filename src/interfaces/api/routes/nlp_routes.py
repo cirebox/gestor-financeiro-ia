@@ -3,10 +3,12 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from src.application.usecases.nlp_usecases import NLPUseCases
+from src.domain.entities.user import User
+from src.application.security.auth import get_current_active_user
 from src.interfaces.api.dependencies import get_nlp_usecases, get_current_user_id
 
 
@@ -48,7 +50,7 @@ class NLPResponse(BaseModel):
 @router.post("/process", response_model=NLPResponse)
 async def process_command(
     request: NLPRequest,
-    user_id: UUID = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_active_user),
     nlp_usecases: NLPUseCases = Depends(get_nlp_usecases)
 ):
     """
@@ -62,7 +64,10 @@ async def process_command(
     - "excluir transação id abc123"
     """
     try:
-        result = await nlp_usecases.process_command(user_id, request.command)
+        result = await nlp_usecases.process_command(current_user.id, request.command)
         return NLPResponse(**result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao processar comando: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Erro ao processar comando: {str(e)}"
+        )
