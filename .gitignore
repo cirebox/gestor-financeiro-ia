@@ -18,3 +18,12 @@ npm-debug.log*
 # WhatsApp session
 .wwebjs_auth/
 .wwebjs_cache/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*$py.class
