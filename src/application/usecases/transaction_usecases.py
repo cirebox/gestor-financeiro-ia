@@ -27,17 +27,22 @@ class TransactionUseCases:
         self.transaction_repository = transaction_repository
         self.category_repository = category_repository
     
-    async def add_transaction(self, 
-                              user_id: UUID, 
-                              type: str, 
-                              amount: Union[Money, float, str], 
-                              category: str, 
-                              description: str, 
-                              date: Optional[datetime] = None,
-                              priority: Optional[str] = None,
-                              recurrence: Optional[Dict[str, Any]] = None,
-                              installment_info: Optional[Dict[str, Any]] = None,
-                              tags: Optional[List[str]] = None) -> Transaction:
+    async def add_transaction(
+        self,
+        user_id: UUID,
+        type: str,
+        amount: Union[Money, float, str],
+        category: str,
+        description: str,
+        date: Optional[datetime] = None,
+        priority: Optional[str] = None,
+        recurrence: Optional[Dict[str, Any]] = None,
+        installment_info: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        due_date: Optional[datetime] = None,
+        is_paid: bool = False,
+        paid_date: Optional[datetime] = None
+    ) -> Transaction:
         """
         Adiciona uma nova transação.
         
@@ -52,6 +57,9 @@ class TransactionUseCases:
             recurrence: Informações de recorrência {'frequency': 'mensal', 'end_date': datetime, 'occurrences': int}
             installment_info: Informações de parcelamento {'total': int, 'current': int}
             tags: Lista de tags para classificação adicional
+            due_date: Data de vencimento
+            is_paid: Se a transação foi quitada
+            paid_date: Data em que foi quitada
             
         Returns:
             A transação criada
@@ -105,6 +113,18 @@ class TransactionUseCases:
                 'current': current_installment,
                 'reference_id': installment_id
             }
+        
+        # Define data de vencimento para parcelas se não especificada
+        if processed_installment_info and not due_date:
+            # Para a primeira parcela, define vencimento para o final do mês atual
+            if processed_installment_info['current'] == 1:
+                today = datetime.now()
+                if today.month == 12:
+                    next_month = datetime(today.year + 1, 1, 1)
+                else:
+                    next_month = datetime(today.year, today.month + 1, 1)
+                last_day = (next_month - timedelta(days=1)).day
+                due_date = datetime(today.year, today.month, last_day)
             
         # Cria a transação
         transaction = Transaction.create(
@@ -117,7 +137,10 @@ class TransactionUseCases:
             priority=priority,
             recurrence=recurrence_obj,
             installment_info=processed_installment_info,
-            tags=tags
+            tags=tags,
+            due_date=due_date,
+            is_paid=is_paid,
+            paid_date=paid_date
         )
         
         # Adiciona a transação ao repositório
@@ -132,6 +155,110 @@ class TransactionUseCases:
             )
             
         return added_transaction
+    
+    async def mark_transaction_as_paid(self, transaction_id: UUID, paid_date: Optional[datetime] = None) -> Optional[Transaction]:
+        """
+        Marca uma transação como paga.
+        
+        Args:
+            transaction_id: ID da transação a ser marcada como paga
+            paid_date: Data em que foi paga (padrão é data atual)
+            
+        Returns:
+            A transação atualizada ou None se não encontrada
+        """
+        # Busca a transação
+        transaction = await self.transaction_repository.get_by_id(transaction_id)
+        if not transaction:
+            return None
+        
+        # Se já estiver paga, não faz nada
+        if transaction.is_paid:
+            return transaction
+        
+        # Define a data de pagamento
+        paid_date = paid_date or datetime.now()
+        
+        # Atualiza a transação
+        updated_transaction = await self.transaction_repository.update(
+            transaction_id, 
+            {
+                "is_paid": True, 
+                "paid_date": paid_date
+            }
+        )
+        
+        return updated_transaction
+
+    async def get_unpaid_transactions(
+        self, 
+        user_id: UUID, 
+        include_overdue_only: bool = False,
+        category: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> List[Transaction]:
+        """
+        Recupera transações não pagas do usuário.
+        
+        Args:
+            user_id: ID do usuário
+            include_overdue_only: Se True, inclui apenas transações vencidas
+            category: Categoria opcional para filtrar
+            start_date: Data inicial opcional
+            end_date: Data final opcional
+            
+        Returns:
+            Lista de transações não pagas
+        """
+        filters = {
+            "is_paid": False,
+            "type": "expense"  # Apenas despesas podem estar "não pagas"
+        }
+        
+        if include_overdue_only:
+            filters["due_date_lt"] = datetime.now()
+        
+        if category:
+            filters["category"] = category
+            
+        if start_date:
+            filters["start_date"] = start_date
+            
+        if end_date:
+            filters["end_date"] = end_date
+        
+        return await self.transaction_repository.get_by_user(user_id, filters)
+
+    async def get_transactions_by_due_date(
+        self,
+        user_id: UUID,
+        days_range: int = 30,
+        is_paid: Optional[bool] = None
+    ) -> List[Transaction]:
+        """
+        Recupera transações com vencimento próximo.
+        
+        Args:
+            user_id: ID do usuário
+            days_range: Número de dias à frente para buscar vencimentos
+            is_paid: Filtro opcional para transações pagas/não pagas
+            
+        Returns:
+            Lista de transações ordenadas por data de vencimento
+        """
+        today = datetime.now()
+        end_date = today + timedelta(days=days_range)
+        
+        filters = {
+            "due_date_between": (today, end_date),
+            "type": "expense"
+        }
+        
+        if is_paid is not None:
+            filters["is_paid"] = is_paid
+        
+        return await self.transaction_repository.get_by_user(user_id, filters)
     
     async def _create_remaining_installments(self, 
                                            user_id: UUID, 

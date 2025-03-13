@@ -30,7 +30,8 @@ class TransactionModel:
             "category": transaction.category,
             "description": transaction.description,
             "date": transaction.date,
-            "createdAt": transaction.created_at
+            "createdAt": transaction.created_at,
+            "isPaid": transaction.is_paid
         }
         
         # Adiciona campos opcionais se existirem
@@ -52,6 +53,12 @@ class TransactionModel:
             
         if transaction.installment_info:
             transaction_dict["installmentInfo"] = transaction.installment_info
+            
+        if transaction.due_date:
+            transaction_dict["dueDate"] = transaction.due_date
+            
+        if transaction.paid_date:
+            transaction_dict["paidDate"] = transaction.paid_date
             
         return transaction_dict
     
@@ -102,7 +109,10 @@ class TransactionModel:
                 priority=data.get("priority"),
                 recurrence=recurrence,
                 installment_info=installment_info,
-                tags=tags
+                tags=tags,
+                due_date=data.get("dueDate"),
+                is_paid=data.get("isPaid", False),
+                paid_date=data.get("paidDate")
             )
         except (KeyError, ValueError) as e:
             # Log do erro seria apropriado aqui

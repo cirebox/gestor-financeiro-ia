@@ -1,4 +1,6 @@
 # src/application/usecases/whatsapp_contact_usecases.py
+# This is an extended version of the existing whatsapp_contact_usecases.py
+
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
 from uuid import UUID

@@ -24,6 +24,9 @@ class Transaction:
     recurrence: Optional[Recurrence] = None
     installment_info: Optional[dict] = None  # Para parcelamentos: {'total': 12, 'current': 1, 'reference_id': UUID}
     tags: List[str] = None  # Tags para classificação adicional
+    due_date: Optional[datetime] = None  # Data de vencimento
+    is_paid: bool = False  # Indica se foi quitada
+    paid_date: Optional[datetime] = None  # Data em que foi quitada
     
     @classmethod
     def create(cls, 
@@ -36,7 +39,10 @@ class Transaction:
                priority: Optional[str] = None,
                recurrence: Optional[Recurrence] = None,
                installment_info: Optional[dict] = None,
-               tags: Optional[List[str]] = None) -> 'Transaction':
+               tags: Optional[List[str]] = None,
+               due_date: Optional[datetime] = None,
+               is_paid: bool = False,
+               paid_date: Optional[datetime] = None) -> 'Transaction':
         """
         Cria uma nova instância de Transaction.
         
@@ -46,11 +52,14 @@ class Transaction:
             amount: Valor da transação (Money ou float)
             category: Categoria da transação
             description: Descrição da transação
-            date: Data da transação (opcional, padrão é agora)
+            date: Data da transação (opcional)
             priority: Prioridade da transação ('alta', 'média', 'baixa')
             recurrence: Informações de recorrência
             installment_info: Informações de parcelamento
             tags: Lista de tags para classificação adicional
+            due_date: Data de vencimento da transação
+            is_paid: Se a transação foi quitada
+            paid_date: Data em que a transação foi quitada
             
         Returns:
             Uma nova instância de Transaction
@@ -67,6 +76,16 @@ class Transaction:
         if priority is not None and priority not in ('alta', 'média', 'baixa'):
             raise ValueError("A prioridade deve ser 'alta', 'média' ou 'baixa'")
             
+        # Se for marcada como quitada, mas não tiver data de quitação, usar data atual
+        if is_paid and paid_date is None:
+            paid_date = datetime.now()
+            
+        # Se for receita (income), considerar como paga por padrão
+        if type == 'income' and is_paid is None:
+            is_paid = True
+            if paid_date is None:
+                paid_date = date
+            
         return cls(
             id=uuid4(),
             user_id=user_id,
@@ -79,7 +98,10 @@ class Transaction:
             priority=priority,
             recurrence=recurrence,
             installment_info=installment_info,
-            tags=tags or []
+            tags=tags or [],
+            due_date=due_date,
+            is_paid=is_paid,
+            paid_date=paid_date
         )
         
     def is_recurring(self) -> bool:
@@ -89,3 +111,31 @@ class Transaction:
     def is_installment(self) -> bool:
         """Verifica se a transação é parcelada."""
         return self.installment_info is not None
+        
+    def is_overdue(self) -> bool:
+        """Verifica se a transação está vencida (apenas para despesas não pagas)."""
+        if self.type != 'expense' or self.is_paid:
+            return False
+            
+        if self.due_date is None:
+            return False
+            
+        return self.due_date < datetime.now()
+        
+    def days_to_due(self) -> Optional[int]:
+        """Retorna o número de dias até o vencimento (ou desde o vencimento, se negativo)."""
+        if self.due_date is None:
+            return None
+            
+        delta = self.due_date - datetime.now()
+        return delta.days
+        
+    def mark_as_paid(self, paid_date: Optional[datetime] = None) -> None:
+        """
+        Marca a transação como paga.
+        
+        Args:
+            paid_date: Data em que foi paga (padrão é a data atual)
+        """
+        self.is_paid = True
+        self.paid_date = paid_date or datetime.now()

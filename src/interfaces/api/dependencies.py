@@ -1,4 +1,5 @@
-# src/interfaces/api/dependencies.py
+# src/interfaces/api/dependencies.py - Versão reorganizada
+
 from fastapi import Depends, Header, HTTPException
 from uuid import UUID
 
@@ -7,31 +8,22 @@ from src.application.usecases.category_usecases import CategoryUseCases
 from src.application.usecases.analytics_usecases import AnalyticsUseCases
 from src.application.usecases.nlp_usecases import NLPUseCases
 from src.application.usecases.user_usecases import UserUseCases
+from src.application.usecases.whatsapp_contact_usecases import WhatsAppContactUseCases
+
 from src.infrastructure.database.repositories.mongodb_transaction_repository import MongoDBTransactionRepository
 from src.infrastructure.database.repositories.mongodb_category_repository import MongoDBCategoryRepository
 from src.infrastructure.database.repositories.mongodb_user_repository import MongoDBUserRepository
+from src.infrastructure.database.repositories.mongodb_whatsapp_contact_repository import MongoDBWhatsAppContactRepository
+
 from src.infrastructure.analytics.analytics_service import AnalyticsService
 from src.infrastructure.nlp.nlp_service import NLPService
 from src.infrastructure.nlp.llm_service import OpenAIService
+
 from src.domain.entities.user import User
 from config import settings
 
 
-# Dependência para obter o ID do usuário atual
-async def get_current_user_id(x_user_id: str = Header(...)):
-    """
-    Obtém o ID do usuário atual a partir do cabeçalho.
-    
-    Em uma implementação real, isso seria substituído por um sistema de autenticação
-    apropriado, como JWT ou OAuth.
-    """
-    try:
-        return UUID(x_user_id)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="ID de usuário inválido")
-
-
-# Dependências para casos de uso
+# Dependências para repositórios
 def get_transaction_repository():
     """Obtém uma instância do repositório de transações."""
     return MongoDBTransactionRepository()
@@ -41,10 +33,18 @@ def get_category_repository():
     """Obtém uma instância do repositório de categorias."""
     return MongoDBCategoryRepository()
 
+
 def get_user_repository():
     """Obtém uma instância do repositório de usuários."""
     return MongoDBUserRepository()
 
+
+def get_whatsapp_contact_repository():
+    """Obtém uma instância do repositório de contatos de WhatsApp."""
+    return MongoDBWhatsAppContactRepository()
+
+
+# Dependências para serviços
 def get_analytics_service():
     """Obtém uma instância do serviço de análises."""
     return AnalyticsService()
@@ -59,6 +59,7 @@ def get_nlp_service():
     return NLPService()
 
 
+# Dependências para casos de uso
 def get_transaction_usecases(
     transaction_repository=Depends(get_transaction_repository),
     category_repository=Depends(get_category_repository)
@@ -73,11 +74,20 @@ def get_category_usecases(
     """Obtém uma instância dos casos de uso de categorias."""
     return CategoryUseCases(category_repository)
 
+
 def get_user_usecases(
     user_repository=Depends(get_user_repository)
 ):
     """Obtém uma instância dos casos de uso de usuários."""
     return UserUseCases(user_repository)
+
+
+def get_whatsapp_contact_usecases(
+    whatsapp_contact_repository=Depends(get_whatsapp_contact_repository)
+):
+    """Obtém uma instância dos casos de uso de contatos de WhatsApp."""
+    return WhatsAppContactUseCases(whatsapp_contact_repository)
+
 
 def get_analytics_usecases(
     analytics_service=Depends(get_analytics_service),
@@ -96,8 +106,8 @@ def get_nlp_usecases(
     """Obtém uma instância dos casos de uso de NLP."""
     return NLPUseCases(nlp_service, transaction_usecases, category_usecases, analytics_usecases)
 
+
 # Função auxiliar para obtenção de ID do usuário a partir do objeto User
-# Será usada pelas funções que dependem do usuário autenticado
 def get_user_id_from_user(user: User) -> UUID:
     """
     Obtém o ID do usuário a partir do objeto User.
@@ -109,15 +119,13 @@ def get_user_id_from_user(user: User) -> UUID:
         ID do usuário
     """
     return user.id
-    
-# Este método foi mantido por compatibilidade, mas está marcado como obsoleto
+
+
+# Este método é para compatibilidade com o código existente
 # Será substituído pelo sistema de autenticação JWT
 async def get_current_user_id(x_user_id: str = Header(...)):
     """
     Obtém o ID do usuário atual a partir do cabeçalho.
-    
-    Esta função é obsoleta e será removida em versões futuras.
-    Use a dependência get_current_active_user do módulo de autenticação.
     
     Args:
         x_user_id: ID do usuário no cabeçalho X-User-ID

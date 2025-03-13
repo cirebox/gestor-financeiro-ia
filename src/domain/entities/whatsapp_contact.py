@@ -39,4 +39,4 @@ class WhatsAppContact:
             last_interaction=datetime.now(),
             onboarding_complete=False,
             onboarding_step="welcome"
-        )</dataclass>
+        )

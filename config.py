@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # NLP e OpenAI
     OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")    
     USE_LLM_FALLBACK: bool = os.environ.get("USE_LLM_FALLBACK", "False") == "True"
+
+    # WhatsApp Integration
+    WHATSAPP_API_KEY: str = os.environ.get("WHATSAPP_API_KEY", "whatsapp-integration-secret-key")
     
     # Servidor
     HOST: str = os.environ.get("HOST", "0.0.0.0")
@@ -43,7 +46,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str = os.environ.get("SMTP_USERNAME", "")
     SMTP_PASSWORD: str = os.environ.get("SMTP_PASSWORD", "")
     SENDER_EMAIL: str = os.environ.get("SENDER_EMAIL", "noreply@financialtracker.com")
-    SENDER_NAME: str = os.environ.get("SENDER_NAME", "Financial Tracker")
+    SENDER_NAME: str = os.environ.get("SENDER_NAME", "Financial Tracker")    
     
     class Config:
         env_file = ".env"

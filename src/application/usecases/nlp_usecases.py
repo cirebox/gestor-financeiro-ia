@@ -77,6 +77,49 @@ class NLPUseCases:
     
     async def _handle_add_expense(self, user_id: UUID, entities: Dict[str, Any]) -> Dict[str, Any]:
         """Manipula a intenção de adicionar uma despesa."""
+        # Verifica se todas as informações necessárias estão presentes
+        missing_info = []
+        
+        if "amount" not in entities:
+            missing_info.append("valor")
+        
+        if "category" not in entities:
+            missing_info.append("categoria")
+        
+        if "description" not in entities and not entities.get("inference_description", False):
+            missing_info.append("descrição")
+        
+        # Se faltar informações, solicita complementação
+        if missing_info:
+            missing_str = ", ".join(missing_info)
+            
+            # Sugestões de categorias para facilitar
+            suggested_categories = []
+            categories = await self.category_usecases.get_categories(type="expense")
+            if categories:
+                suggested_categories = [cat.name for cat in categories[:5]]
+            
+            return {
+                "status": "confirmation_needed",
+                "message": f"Por favor, informe {missing_str} para registrar a despesa.",
+                "data": {
+                    "partial_entities": {
+                        **entities,
+                        "suggested_categories": suggested_categories
+                    },
+                    "missing_fields": missing_info
+                }
+            }
+        
+        # Se tem descrição inferida mas não explícita, utiliza a inferida
+        if "inference_description" in entities and "description" not in entities:
+            entities["description"] = entities["inference_description"]
+        
+        # Verifica se tem informações sobre vencimento e pagamento
+        due_date = entities.get("due_date")
+        is_paid = entities.get("is_paid", False)
+        paid_date = entities.get("paid_date")
+        
         try:
             transaction = await self.transaction_usecases.add_transaction(
                 user_id=user_id,
@@ -86,11 +129,25 @@ class NLPUseCases:
                 description=entities.get("description", "Despesa sem descrição"),
                 date=entities.get("date"),
                 priority=entities.get("priority"),
-                tags=entities.get("tags")
+                tags=entities.get("tags"),
+                due_date=due_date,
+                is_paid=is_paid,
+                paid_date=paid_date
             )
+            
+            # Mensagem específica dependendo se está paga ou não
+            message = ""
+            if is_paid:
+                message = f"Despesa de R$ {transaction.amount.amount:.2f} em {transaction.category} registrada como quitada!"
+            else:
+                if due_date:
+                    message = f"Despesa de R$ {transaction.amount.amount:.2f} em {transaction.category} registrada com vencimento em {due_date.strftime('%d/%m/%Y')}!"
+                else:
+                    message = f"Despesa de R$ {transaction.amount.amount:.2f} em {transaction.category} registrada!"
+            
             return {
                 "status": "success",
-                "message": f"Despesa de R$ {transaction.amount.amount:.2f} em {transaction.category} registrada com sucesso!",
+                "message": message,
                 "data": {"transaction_id": str(transaction.id)}
             }
         except Exception as e:

@@ -6,9 +6,14 @@ from typing import Callable
 import os
 from jose import JWTError, jwt
 
+from src.interfaces.api.bootstrap import setup_dependencies
+
+# Configura as dependências para evitar importação circular
+setup_dependencies()
+
 from src.domain.exceptions.domain_exceptions import CategoryNotFoundException
 from src.interfaces.api.error_handlers import category_not_found_exception_handler
-from src.interfaces.api.routes import transaction_routes, category_routes, nlp_routes, analytics_routes, user_routes, auth_routes
+from src.interfaces.api.routes import transaction_routes, category_routes, nlp_routes, analytics_routes, user_routes, auth_routes, whatsapp_routes
 
 
 # Rate limiting middleware simples
@@ -92,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(nlp_routes.router, prefix="/api/v1")
     app.include_router(analytics_routes.router, prefix="/api/v1")
     app.include_router(user_routes.router, prefix="/api/v1")  
+    app.include_router(whatsapp_routes.router, prefix="/api/v1")
     
     @app.get("/", tags=["root"])
     async def root():
