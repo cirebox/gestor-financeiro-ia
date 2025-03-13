@@ -7,3 +7,10 @@ python-dotenv==1.0.0
 pydantic==1.10.11
 numpy==1.25.1
 python-dateutil==2.8.2
+openai==0.28.0  # Biblioteca OpenAI para LLM
+regex==2023.6.3  # Biblioteca avançada de expressões regulares
+aiohttp==3.8.5  # Para requisições HTTP assíncronas
+pandas==2.0.3  # Para análise de dados
+python-multipart==0.0.6  # Para upload de arquivos via FastAPI
+email-validator==2.0.0  # Para validação de emails
+colorama==0.4.6  # Para logs coloridos

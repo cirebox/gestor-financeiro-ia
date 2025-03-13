@@ -43,10 +43,40 @@ class TransactionRepositoryInterface(ABC):
         
         Args:
             user_id: ID do usuário
-            filters: Filtros opcionais como data, categoria, tipo etc.
+            filters: Filtros opcionais como data, categoria, tipo, etc.
             
         Returns:
             Lista de transações que correspondem aos critérios
+        """
+        pass
+    
+    @abstractmethod
+    async def get_by_installment_reference(self, reference_id: str, future_only: bool = False) -> List[Transaction]:
+        """
+        Recupera transações que fazem parte de uma série de parcelas.
+        
+        Args:
+            reference_id: ID de referência das parcelas
+            future_only: Se True, retorna apenas parcelas com data futura
+            
+        Returns:
+            Lista de transações da série de parcelas
+        """
+        pass
+    
+    @abstractmethod
+    async def get_recurring_instances(self, 
+                                    recurring_transaction_id: UUID,
+                                    limit_date: Optional[datetime] = None) -> List[Transaction]:
+        """
+        Recupera instâncias de uma transação recorrente.
+        
+        Args:
+            recurring_transaction_id: ID da transação recorrente
+            limit_date: Data limite para busca de instâncias
+            
+        Returns:
+            Lista de instâncias da transação recorrente
         """
         pass
     

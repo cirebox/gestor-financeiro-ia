@@ -12,6 +12,8 @@ from src.infrastructure.database.repositories.mongodb_category_repository import
 from src.infrastructure.database.repositories.mongodb_user_repository import MongoDBUserRepository
 from src.infrastructure.analytics.analytics_service import AnalyticsService
 from src.infrastructure.nlp.nlp_service import NLPService
+from src.infrastructure.nlp.llm_service import OpenAIService
+from config import settings
 
 
 # Dependência para obter o ID do usuário atual
@@ -49,6 +51,10 @@ def get_analytics_service():
 
 def get_nlp_service():
     """Obtém uma instância do serviço de NLP."""
+    # Se a configuração USE_LLM_FALLBACK está ativada, usa o serviço OpenAI como principal
+    # Caso contrário, usa o serviço NLP padrão com fallback para OpenAI
+    if hasattr(settings, 'USE_LLM_FALLBACK') and settings.USE_LLM_FALLBACK:
+        return OpenAIService()
     return NLPService()
 
 

@@ -51,7 +51,7 @@ class MongoDBTransactionRepository(TransactionRepositoryInterface):
         
         Args:
             user_id: ID do usuário
-            filters: Filtros opcionais como data, categoria, tipo etc.
+            filters: Filtros opcionais como data, categoria, tipo, etc.
             
         Returns:
             Lista de transações que correspondem aos critérios
@@ -59,18 +59,20 @@ class MongoDBTransactionRepository(TransactionRepositoryInterface):
         query = {"userId": str(user_id)}
         
         if filters:
-            # Processamento de filtros
+            # Processamento de filtros existentes
             if "start_date" in filters and "end_date" in filters:
                 query["date"] = {
                     "$gte": filters["start_date"],
                     "$lte": filters["end_date"]
                 }
+            elif "date_after" in filters:
+                query["date"] = {"$gte": filters["date_after"]}
+            elif "date_before" in filters:
+                query["date"] = {"$lte": filters["date_before"]}
             
             # Filtro de mês específico
             elif "month" in filters:
-                # Exemplo: filtros['month'] contém um objeto datetime do primeiro dia do mês
                 month_start = filters["month"]
-                # Calcula o último dia do mês
                 if month_start.month == 12:
                     month_end = datetime(month_start.year + 1, 1, 1) - datetime.timedelta(days=1)
                 else:
@@ -88,6 +90,45 @@ class MongoDBTransactionRepository(TransactionRepositoryInterface):
             # Filtro de tipo
             if "type" in filters:
                 query["type"] = filters["type"]
+                
+            # Filtro de prioridade
+            if "priority" in filters:
+                query["priority"] = filters["priority"]
+                
+            # Filtro de recorrência
+            if "has_recurrence" in filters:
+                if filters["has_recurrence"]:
+                    query["recurrence"] = {"$exists": True, "$ne": None}
+                else:
+                    query["$or"] = [
+                        {"recurrence": {"$exists": False}},
+                        {"recurrence": None}
+                    ]
+                    
+            # Filtro de parcelamento
+            if "has_installment_info" in filters:
+                if filters["has_installment_info"]:
+                    query["installmentInfo"] = {"$exists": True, "$ne": None}
+                else:
+                    query["$or"] = [
+                        {"installmentInfo": {"$exists": False}},
+                        {"installmentInfo": None}
+                    ]
+                    
+            # Filtro de ID de referência de parcela
+            if "installment_reference_id" in filters:
+                query["installmentInfo.reference_id"] = filters["installment_reference_id"]
+                
+            # Filtro de tags
+            if "tags" in filters:
+                tags = filters["tags"]
+                if isinstance(tags, list):
+                    if len(tags) == 1:
+                        query["tags"] = tags[0]
+                    else:
+                        query["tags"] = {"$in": tags}
+                else:
+                    query["tags"] = tags
         
         # Ordena por data decrescente (mais recente primeiro)
         cursor = self.collection.find(query).sort("date", -1)
@@ -99,6 +140,76 @@ class MongoDBTransactionRepository(TransactionRepositoryInterface):
             if transaction:
                 transactions.append(transaction)
         
+        return transactions
+    
+    async def get_by_installment_reference(self, reference_id: str, future_only: bool = False) -> List[Transaction]:
+        """
+        Recupera transações que fazem parte de uma série de parcelas.
+        
+        Args:
+            reference_id: ID de referência das parcelas
+            future_only: Se True, retorna apenas parcelas com data futura
+            
+        Returns:
+            Lista de transações da série de parcelas
+        """
+        query = {"installmentInfo.reference_id": reference_id}
+        
+        if future_only:
+            query["date"] = {"$gte": datetime.now()}
+            
+        # Ordena por número da parcela
+        cursor = self.collection.find(query).sort("installmentInfo.current", 1)
+        
+        # Converte documentos para entidades Transaction
+        transactions = []
+        async for document in cursor:
+            transaction = TransactionModel.from_dict(document)
+            if transaction:
+                transactions.append(transaction)
+                
+        return transactions
+    
+    async def get_recurring_instances(self, 
+                                     recurring_transaction_id: UUID,
+                                     limit_date: Optional[datetime] = None) -> List[Transaction]:
+        """
+        Recupera instâncias de uma transação recorrente.
+        
+        Args:
+            recurring_transaction_id: ID da transação recorrente
+            limit_date: Data limite para busca de instâncias
+            
+        Returns:
+            Lista de instâncias da transação recorrente
+        """
+        # Primeiro, recupera a transação recorrente original
+        recurring_transaction = await self.get_by_id(recurring_transaction_id)
+        
+        if not recurring_transaction or not recurring_transaction.recurrence:
+            return []
+            
+        # Busca instâncias que tenham a mesma descrição, categoria e valor
+        query = {
+            "description": recurring_transaction.description,
+            "category": recurring_transaction.category,
+            "amount": float(recurring_transaction.amount.amount),
+            "type": recurring_transaction.type
+        }
+        
+        if limit_date:
+            query["date"] = {"$lte": limit_date}
+            
+        # Ordena por data crescente
+        cursor = self.collection.find(query).sort("date", 1)
+        
+        # Converte documentos para entidades Transaction
+        transactions = []
+        async for document in cursor:
+            transaction = TransactionModel.from_dict(document)
+            if transaction:
+                transactions.append(transaction)
+                
         return transactions
     
     async def update(self, transaction_id: UUID, data: Dict[str, Any]) -> Optional[Transaction]:
@@ -129,6 +240,41 @@ class MongoDBTransactionRepository(TransactionRepositoryInterface):
         
         if "date" in data:
             update_data["date"] = data["date"]
+            
+        if "priority" in data:
+            update_data["priority"] = data["priority"]
+            
+        if "tags" in data:
+            update_data["tags"] = data["tags"]
+            
+        if "recurrence" in data:
+            if data["recurrence"] is None:
+                # Remove o campo de recorrência
+                await self.collection.update_one(
+                    {"_id": str(transaction_id)},
+                    {"$unset": {"recurrence": ""}}
+                )
+            else:
+                # Converte o objeto de recorrência para formato MongoDB
+                update_data["recurrence"] = {
+                    "type": data["recurrence"].type.value,
+                    "startDate": data["recurrence"].start_date,
+                    "endDate": data["recurrence"].end_date,
+                    "dayOfMonth": data["recurrence"].day_of_month,
+                    "dayOfWeek": data["recurrence"].day_of_week,
+                    "occurrences": data["recurrence"].occurrences
+                }
+                
+        if "installment_info" in data:
+            if data["installment_info"] is None:
+                # Remove o campo de parcelamento
+                await self.collection.update_one(
+                    {"_id": str(transaction_id)},
+                    {"$unset": {"installmentInfo": ""}}
+                )
+            else:
+                # Converte o dicionário de parcelamento para formato MongoDB
+                update_data["installmentInfo"] = data["installment_info"]
         
         if not update_data:
             return None

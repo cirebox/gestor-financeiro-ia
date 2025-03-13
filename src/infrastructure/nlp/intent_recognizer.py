@@ -16,7 +16,11 @@ class IntentRecognizer(NLPServiceInterface):
         self.intent_patterns = {
             "ADD_EXPENSE": r"^(adicionar|registrar|inserir|nova|novo|cadastrar)\s+(despesa|gasto|custo)",
             "ADD_INCOME": r"^(adicionar|registrar|inserir|nova|novo|cadastrar)\s+(receita|renda|ganho)",
+            "ADD_RECURRING": r"^(adicionar|registrar|inserir|nova|novo|cadastrar)\s+(despesa|gasto|receita|renda)\s+(recorrente|fixa|mensal|periód)",
+            "ADD_INSTALLMENT": r"^(adicionar|registrar|inserir|nova|novo|cadastrar)\s+(despesa|gasto)\s+(parcelad|em parcelas|a prazo)",
             "LIST_TRANSACTIONS": r"^(listar|mostrar|exibir|ver|consultar|todas|todos)\s+(transações|despesas|gastos|receitas|rendas)|quanto\s+(gastei|recebi|ganhei)",
+            "LIST_RECURRING": r"^(listar|mostrar|exibir|ver|consultar)\s+(despesas|gastos|receitas|rendas)\s+(recorrentes|fixas|fixos|mensais)",
+            "LIST_INSTALLMENTS": r"^(listar|mostrar|exibir|ver|consultar)\s+(despesas|gastos)\s+(parcelad|parcelas|a prazo)",
             "GET_BALANCE": r"^(saldo|balanço|quanto\s+tenho|resumo|situação|resultado|total)|quanto\s+(gastei|recebi|resta|sobrou)",
             "DELETE_TRANSACTION": r"^(excluir|apagar|deletar|remover)\s+(transação|despesa|receita)",
             "UPDATE_TRANSACTION": r"^(atualizar|editar|modificar|alterar|mudar)\s+(transação|despesa|receita)",
@@ -28,10 +32,11 @@ class IntentRecognizer(NLPServiceInterface):
         # Definição dos padrões regex para extração de entidades
         self.entity_patterns = {
             "amount": r"(?:R\$\s?)?(\d+[,.]\d+|\d+)",
-            "category_expense": r"(?:em|para|com)\s+([a-zA-ZÀ-ÿ\s]+)",
-            "category_income": r"(?:de|como)\s+([a-zA-ZÀ-ÿ\s]+)",
-            "category_explicit": r"categoria\s+([a-zA-ZÀ-ÿ\s]+)",
+            "category_expense": r"(?:em|para|com|na|no|categoria)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s+(?:de|com|no valor|valor|descrição|R\$|\d|\"|\')|$)",
+            "category_income": r"(?:de|como|categoria)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s+(?:de|com|no valor|valor|descrição|R\$|\d|\"|\')|$)",
+            "category_explicit": r"categoria\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s+(?:de|com|no valor|valor|descrição|R\$|\d|\"|\')|$)",
             "description": r"descrição\s+[\"'](.+?)[\"']|[\"'](.+?)[\"']",
+            "description_natural": r"(?:com|de|para)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s+(?:no valor|de R\$|R\$)|$)",
             "date": r"(?:em|dia|data)\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)",
             "transaction_id": r"id\s+([a-f0-9-]+)",
             "period": r"(?:de|em|no)\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+(?:a|até|ao)\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)",
@@ -40,7 +45,11 @@ class IntentRecognizer(NLPServiceInterface):
             "update_amount": r"valor\s+(?:para\s+)?(?:R\$\s?)?(\d+[,.]\d+|\d+)",
             "update_category": r"categoria\s+(?:para\s+)?([a-zA-ZÀ-ÿ\s]+)",
             "update_description": r"descrição\s+(?:para\s+)?[\"'](.+?)[\"']",
-            "update_date": r"data\s+(?:para\s+)?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)"
+            "update_date": r"data\s+(?:para\s+)?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)",
+            "priority": r"(?:prioridade|urgência|importância)\s+(alta|média|baixa)",
+            "frequency": r"(?:frequência|periodicidade)\s+(diária|semanal|quinzenal|mensal|bimestral|trimestral|semestral|anual)",
+            "installments": r"(?:em|de)\s+(\d+)\s+(?:parcelas|vezes|prestações)",
+            "tag": r"(?:tag|marcador|etiqueta)s?\s+([a-zA-ZÀ-ÿ,\s]+)"
         }
         
         # Mapeamento de meses em português para números
@@ -105,7 +114,14 @@ class IntentRecognizer(NLPServiceInterface):
             "minhas despesas": "listar despesas",
             "meus gastos": "listar gastos",
             "minhas receitas": "listar receitas",
-            "meus ganhos": "listar receitas"
+            "meus ganhos": "listar receitas",
+            "despesas recorrentes": "listar despesas recorrentes",
+            "assinaturas": "listar despesas recorrentes",
+            "despesas fixas": "listar despesas recorrentes",
+            "despesas mensais": "listar despesas recorrentes",
+            "despesas parceladas": "listar despesas parceladas",
+            "parcelas": "listar despesas parceladas",
+            "prestações": "listar despesas parceladas"
         }
         
         for pattern, replacement in mappings.items():
@@ -135,6 +151,20 @@ class IntentRecognizer(NLPServiceInterface):
                 return "LIST_TRANSACTIONS"
             return "GET_BALANCE"
         
+        # Detecção para despesas recorrentes sem padrão claro
+        if "recorrente" in text or "fixa" in text or "mensal" in text:
+            if "adicionar" in text or "registrar" in text or "nova" in text:
+                return "ADD_RECURRING"
+            elif "listar" in text or "mostrar" in text or "exibir" in text:
+                return "LIST_RECURRING"
+        
+        # Detecção para despesas parceladas sem padrão claro
+        if "parcela" in text or "a prazo" in text or "parcelado" in text or "prestação" in text:
+            if "adicionar" in text or "registrar" in text or "nova" in text:
+                return "ADD_INSTALLMENT"
+            elif "listar" in text or "mostrar" in text or "exibir" in text:
+                return "LIST_INSTALLMENTS"
+        
         # Se não encontrou nenhuma intenção clara
         return "UNKNOWN"
     
@@ -143,7 +173,7 @@ class IntentRecognizer(NLPServiceInterface):
         entities = {}
         
         # Extração comum para várias intenções
-        if intent in ["ADD_EXPENSE", "ADD_INCOME"]:
+        if intent in ["ADD_EXPENSE", "ADD_INCOME", "ADD_RECURRING", "ADD_INSTALLMENT"]:
             # Extrai valor
             amount_match = re.search(self.entity_patterns["amount"], text)
             if amount_match:
@@ -151,26 +181,126 @@ class IntentRecognizer(NLPServiceInterface):
                 entities["amount"] = float(amount_str)
             
             # Extrai categoria
-            if intent == "ADD_EXPENSE":
-                category_match = re.search(self.entity_patterns["category_explicit"], text) or re.search(self.entity_patterns["category_expense"], text)
+            if intent in ["ADD_EXPENSE", "ADD_RECURRING", "ADD_INSTALLMENT"]:
+                category_match = (
+                    re.search(self.entity_patterns["category_explicit"], text) or 
+                    re.search(self.entity_patterns["category_expense"], text)
+                )
             else:  # ADD_INCOME
-                category_match = re.search(self.entity_patterns["category_explicit"], text) or re.search(self.entity_patterns["category_income"], text)
+                category_match = (
+                    re.search(self.entity_patterns["category_explicit"], text) or 
+                    re.search(self.entity_patterns["category_income"], text)
+                )
             
             if category_match:
                 entities["category"] = category_match.group(1).strip()
             
-            # Extrai descrição
+            # Extrai descrição (formato específico)
             description_match = re.search(self.entity_patterns["description"], text)
             if description_match:
                 # Pode estar no grupo 1 ou 2, dependendo de qual regex correspondeu
                 entities["description"] = description_match.group(1) if description_match.group(1) else description_match.group(2)
+            else:
+                # Tenta extrair descrição de forma mais natural
+                # Primeiro extrai texto entre "com" e valor numérico
+                description_natural_match = None
+                
+                # Na versão melhorada, tentamos extrair a descrição de maneira mais natural
+                # Padrão: se o texto contém "com [algo]" e esse algo não foi identificado como categoria
+                com_pattern = r"(?:com|de)\s+([a-zA-ZÀ-ÿ\s]+)(?=\s+\d|\s+R\$|\s*$)"
+                description_natural_match = re.search(com_pattern, text)
+                
+                if description_natural_match:
+                    possible_description = description_natural_match.group(1).strip()
+                    
+                    # Verifica se a descrição extraída não é a mesma que a categoria
+                    if "category" not in entities or possible_description != entities["category"]:
+                        entities["description"] = possible_description
+                
+                # Se não encontrou descrição com o padrão anterior, tenta outro enfoque
+                if "description" not in entities:
+                    # Extrai texto após a categoria e valor, assumindo que pode ser uma descrição
+                    if "category" in entities and "amount" in entities:
+                        parts = text.split()
+                        
+                        # Encontra a posição do valor
+                        amount_str = str(entities["amount"]).replace('.', ',')
+                        amount_positions = [i for i, part in enumerate(parts) if amount_str in part or part.isdigit()]
+                        
+                        if amount_positions:
+                            # Assume que tudo após o valor é uma descrição
+                            # a menos que sejam palavras-chave específicas
+                            last_amount_pos = amount_positions[-1]
+                            if last_amount_pos + 1 < len(parts):
+                                remaining_text = ' '.join(parts[last_amount_pos + 1:])
+                                
+                                # Ignora palavras-chave que podem não ser parte da descrição
+                                ignore_keywords = [
+                                    "descrição", "categoria", "em", "como", "de", "para", 
+                                    "data", "dia", "prioridade", "frequência", "recorrente", 
+                                    "parcela", "parcelas", "vezes", "prestação", "prestações", 
+                                    "tag", "tags", "mensal", "semanal", "anual"
+                                ]
+                                if not any(keyword in remaining_text.lower() for keyword in ignore_keywords):
+                                    entities["description"] = remaining_text.strip()
             
             # Extrai data
             date_match = re.search(self.entity_patterns["date"], text)
             if date_match:
                 entities["date"] = self._parse_date(date_match.group(1))
+                
+            # Extrai prioridade
+            priority_match = re.search(self.entity_patterns["priority"], text)
+            if priority_match:
+                entities["priority"] = priority_match.group(1).lower()
+                
+            # Extrai tags
+            tag_match = re.search(self.entity_patterns["tag"], text)
+            if tag_match:
+                tag_text = tag_match.group(1)
+                # Divide as tags pela vírgula e remove espaços
+                entities["tags"] = [tag.strip() for tag in tag_text.split(',')]
+                
+            # Extrai informações específicas para transações recorrentes
+            if intent == "ADD_RECURRING":
+                # Extrai frequência
+                frequency_match = re.search(self.entity_patterns["frequency"], text)
+                if frequency_match:
+                    entities["frequency"] = frequency_match.group(1).lower()
+                else:
+                    # Se não especificou, assume mensal
+                    entities["frequency"] = "mensal"
+                    
+                # Para transações recorrentes, já forma o objeto de recorrência
+                entities["recurrence"] = {
+                    "frequency": entities.get("frequency", "mensal"),
+                    "end_date": None,
+                    "occurrences": None
+                }
+                
+            # Extrai informações específicas para transações parceladas
+            if intent == "ADD_INSTALLMENT":
+                # Extrai número de parcelas
+                installments_match = re.search(self.entity_patterns["installments"], text)
+                if installments_match:
+                    entities["total_installments"] = int(installments_match.group(1))
+                else:
+                    # Busca diretamente por números seguidos de "parcelas", "vezes" ou "prestações"
+                    alternate_pattern = r"(\d+)\s+(?:parcelas|vezes|prestações)"
+                    alternate_match = re.search(alternate_pattern, text)
+                    if alternate_match:
+                        entities["total_installments"] = int(alternate_match.group(1))
+                    else:
+                        # Valor padrão (2 parcelas)
+                        entities["total_installments"] = 2
+                        
+                # Para transações parceladas, já forma o objeto de parcelamento
+                entities["installment_info"] = {
+                    "total": entities.get("total_installments", 2),
+                    "current": 1
+                }
         
-        elif intent in ["LIST_TRANSACTIONS", "GET_BALANCE"]:
+        elif intent in ["LIST_TRANSACTIONS", "GET_BALANCE", "LIST_RECURRING", "LIST_INSTALLMENTS"]:
             # Extrai período (intervalo de datas)
             period_match = re.search(self.entity_patterns["period"], text)
             if period_match:
@@ -186,8 +316,8 @@ class IntentRecognizer(NLPServiceInterface):
                     current_year = datetime.now().year
                     entities["month"] = datetime(current_year, month_num, 1)
             
-            # Para LIST_TRANSACTIONS, extrai também tipo e categoria
-            if intent == "LIST_TRANSACTIONS":
+            # Para LIST_TRANSACTIONS e LIST_RECURRING, extrai também tipo e categoria
+            if intent in ["LIST_TRANSACTIONS", "LIST_RECURRING"]:
                 if "despesas" in text or "gastos" in text:
                     entities["type"] = "expense"
                 elif "receitas" in text or "rendas" in text or "ganhos" in text:
@@ -196,6 +326,25 @@ class IntentRecognizer(NLPServiceInterface):
                 category_match = re.search(self.entity_patterns["category_explicit"], text)
                 if category_match:
                     entities["category"] = category_match.group(1).strip()
+                    
+            # Para LIST_RECURRING, adiciona flag específica
+            if intent == "LIST_RECURRING":
+                entities["is_recurring"] = True
+                
+            # Para LIST_INSTALLMENTS, adiciona flag específica
+            if intent == "LIST_INSTALLMENTS":
+                entities["is_installment"] = True
+                
+            # Extrai prioridade para filtros
+            priority_match = re.search(self.entity_patterns["priority"], text)
+            if priority_match:
+                entities["priority"] = priority_match.group(1).lower()
+                
+            # Extrai tags para filtros
+            tag_match = re.search(self.entity_patterns["tag"], text)
+            if tag_match:
+                tag_text = tag_match.group(1)
+                entities["tags"] = [tag.strip() for tag in tag_text.split(',')]
         
         elif intent in ["DELETE_TRANSACTION", "UPDATE_TRANSACTION"]:
             # Extrai ID da transação
@@ -221,6 +370,17 @@ class IntentRecognizer(NLPServiceInterface):
                 update_date_match = re.search(self.entity_patterns["update_date"], text)
                 if update_date_match:
                     entities["date"] = self._parse_date(update_date_match.group(1))
+                    
+                # Extrai prioridade
+                priority_match = re.search(self.entity_patterns["priority"], text)
+                if priority_match:
+                    entities["priority"] = priority_match.group(1).lower()
+                    
+                # Extrai tags
+                tag_match = re.search(self.entity_patterns["tag"], text)
+                if tag_match:
+                    tag_text = tag_match.group(1)
+                    entities["tags"] = [tag.strip() for tag in tag_text.split(',')]
         
         elif intent == "ADD_CATEGORY":
             # Extrai nome da categoria
@@ -240,6 +400,53 @@ class IntentRecognizer(NLPServiceInterface):
                 entities["type"] = "expense"
             elif "receitas" in text:
                 entities["type"] = "income"
+        
+        # Se não encontrarmos categoria mas for uma despesa, usamos uma fallback
+        if intent in ["ADD_EXPENSE", "ADD_RECURRING", "ADD_INSTALLMENT"] and "category" not in entities:
+            # Caso especial para detecção de categorias comuns
+            common_categories = {
+                "alimenta": "Alimentação",
+                "comida": "Alimentação",
+                "restaurante": "Alimentação",
+                "lanche": "Alimentação",
+                "café": "Alimentação",
+                "mercado": "Alimentação",
+                "supermercado": "Alimentação",
+                "farmácia": "Saúde",
+                "médico": "Saúde",
+                "remédio": "Saúde",
+                "transporte": "Transporte",
+                "uber": "Transporte",
+                "táxi": "Transporte",
+                "combustível": "Transporte",
+                "gasolina": "Transporte",
+                "escola": "Educação",
+                "curso": "Educação",
+                "faculdade": "Educação",
+                "aluguel": "Moradia",
+                "condomínio": "Moradia",
+                "água": "Moradia",
+                "luz": "Moradia",
+                "internet": "Moradia",
+                "cinema": "Lazer",
+                "show": "Lazer",
+                "jogo": "Lazer",
+                "streaming": "Lazer",
+                "netflix": "Lazer",
+                "spotify": "Lazer",
+                "assinatura": "Lazer"
+            }
+            
+            # Tenta encontrar palavras-chave no texto que indiquem a categoria
+            text_normalized = text.lower()
+            for keyword, category in common_categories.items():
+                if keyword in text_normalized:
+                    entities["category"] = category
+                    break
+            
+            # Se ainda não temos categoria, estabelecemos um valor padrão
+            if "category" not in entities:
+                entities["category"] = "Outros"
         
         return entities
     
