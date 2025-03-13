@@ -374,60 +374,82 @@ class ImprovedIntentRecognizer:
         return corrected
     
     def _preprocess_text(self, text: str) -> str:
-        """
-        Pré-processa o texto para normalização e correção de erros comuns.
+    """
+    Pré-processa o texto para normalização e correção de erros comuns.
+    
+    Args:
+        text: Texto original
         
-        Args:
-            text: Texto original
-            
-        Returns:
-            Texto corrigido e normalizado
-        """
-        # Aplica correções para erros comuns de digitação
-        corrected = self._correct_misspellings(text)
-        
-        # Aplica correções para padrões de erro comuns
-        corrected = self._apply_common_error_corrections(corrected)
-        
-        # Mapeia frases comuns para comandos reconhecidos
-        mappings = {
-            "pt-BR": {
-                "todas as despesas": "listar despesas",
-                "todos os gastos": "listar despesas",
-                "todas as receitas": "listar receitas",
-                "todos os ganhos": "listar receitas",
-                "todas as transações": "listar transações",
-                "todos os movimentos": "listar transações",
-                "quanto gastei": "listar despesas",
-                "quanto recebi": "listar receitas",
-                "qual meu saldo": "saldo",
-                "como estão minhas finanças": "saldo",
-                "minhas despesas": "listar despesas",
-                "meus gastos": "listar gastos",
-                "minhas receitas": "listar receitas",
-                "meus ganhos": "listar receitas",
-                "despesas recorrentes": "listar despesas recorrentes",
-                "assinaturas": "listar despesas recorrentes",
-                "despesas fixas": "listar despesas recorrentes",
-                "despesas mensais": "listar despesas recorrentes",
-                "despesas parceladas": "listar despesas parceladas",
-                "parcelas": "listar despesas parceladas",
-                "prestações": "listar despesas parceladas",
-                "comprei": "adicionar despesa",
-                "gastei": "adicionar despesa",
-                "paguei": "adicionar despesa",
-                "recebi": "adicionar receita",
-                "ganhei": "adicionar receita"
-            },
-            "en-US": {
-                "all expenses": "list expenses",
-                "all spending": "list expenses",
-                "all income": "list income",
-                "all revenue": "list income",
-                "all transactions": "list transactions",
-                "all movements": "list transactions",
-                "how much did i spend": "list expenses",
-                "how much did i receive": "list income",
-                "what is my balance": "balance",
-                "how are my finances": "balance",
-                "my expenses
+    Returns:
+        Texto corrigido e normalizado
+    """
+    # Aplica correções para erros comuns de digitação
+    corrected = self._correct_misspellings(text)
+    
+    # Aplica correções para padrões de erro comuns
+    corrected = self._apply_common_error_corrections(corrected)
+    
+    # Define os mapeamentos de linguagem (pode ser expandido para suportar múltiplos idiomas)
+    mappings = {
+        "pt-BR": {
+            "todas as despesas": "listar despesas",
+            "todos os gastos": "listar despesas",
+            "todas as receitas": "listar receitas",
+            "todos os ganhos": "listar receitas",
+            "todas as transações": "listar transações",
+            "todos os movimentos": "listar transações",
+            "quanto gastei": "listar despesas",
+            "quanto recebi": "listar receitas",
+            "qual meu saldo": "saldo",
+            "como estão minhas finanças": "saldo",
+            "minhas despesas": "listar despesas",
+            "meus gastos": "listar gastos",
+            "minhas receitas": "listar receitas",
+            "meus ganhos": "listar receitas",
+            "despesas recorrentes": "listar despesas recorrentes",
+            "assinaturas": "listar despesas recorrentes",
+            "despesas fixas": "listar despesas recorrentes",
+            "despesas mensais": "listar despesas recorrentes",
+            "despesas parceladas": "listar despesas parceladas",
+            "parcelas": "listar despesas parceladas",
+            "prestações": "listar despesas parceladas",
+            "comprei": "adicionar despesa",
+            "gastei": "adicionar despesa",
+            "paguei": "adicionar despesa",
+            "recebi": "adicionar receita",
+            "ganhei": "adicionar receita"
+        },
+        "en-US": {
+            "all expenses": "list expenses",
+            "total expenses": "list expenses", 
+            "all incomes": "list income",
+            "total income": "list income",
+            "all transactions": "list transactions",
+            "how much i spent": "list expenses", 
+            "how much i received": "list income",
+            "my balance": "balance",
+            "financial status": "balance",
+            "my expenses": "list expenses",
+            "my incomes": "list income",
+            "recurring expenses": "list recurring expenses",
+            "subscriptions": "list recurring expenses",
+            "installment expenses": "list installments",
+            "bought": "add expense",
+            "spent": "add expense", 
+            "paid": "add expense",
+            "received": "add income",
+            "earned": "add income"
+        }
+    }
+    
+    # Normaliza o texto (converte para minúsculas e remove acentos)
+    normalized = self._normalize_text(corrected)
+    
+    # Aplica mapeamentos de comandos comuns
+    language_mappings = mappings.get(self.language, mappings["pt-BR"])
+    
+    for phrase, replacement in language_mappings.items():
+        if phrase in normalized:
+            return replacement
+    
+    return corrected
