@@ -924,3 +924,232 @@ class NLPUseCases:
             text = re.sub(pattern, replacement, text, flags=re.MULTILINE)
         
         return text
+    
+# Abaixo estão os métodos adicionais que devem ser incluídos na classe NLPUseCases
+
+async def process_command_with_entities(self, user_id: UUID, command: str, entities: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Processa um comando em linguagem natural usando entidades fornecidas diretamente.
+    Útil para continuar processamento após confirmação do usuário.
+    
+    Args:
+        user_id: ID do usuário
+        command: Comando em linguagem natural (pode estar vazio se entidades forem fornecidas)
+        entities: Dicionário de entidades já extraídas
+        
+    Returns:
+        Resultado do processamento
+    """
+    # Se o comando não estiver vazio, tenta extrair entidades adicionais
+    if command.strip():
+        # Identifica a intenção e extrai entidades do comando
+        intent, new_entities = await self.nlp_service.analyze(command)
+        
+        # Combina as novas entidades com as fornecidas (priorizando as fornecidas)
+        for key, value in new_entities.items():
+            if key not in entities:
+                entities[key] = value
+    else:
+        # Determina a intenção com base nas entidades fornecidas
+        intent = self._determine_intent_from_entities(entities)
+    
+    # Processa a intenção com as entidades combinadas
+    return await self._process_intent(user_id, intent, entities)
+
+def _determine_intent_from_entities(self, entities: Dict[str, Any]) -> str:
+    """
+    Determina a intenção com base nas entidades fornecidas.
+    
+    Args:
+        entities: Dicionário de entidades
+        
+    Returns:
+        Intenção determinada
+    """
+    # Lógica para determinar a intenção a partir das entidades
+    if "amount" in entities:
+        if "type" in entities and entities["type"] == "income":
+            return "ADD_INCOME"
+        elif "installment_info" in entities or "total_installments" in entities:
+            return "ADD_INSTALLMENT"
+        elif "recurrence" in entities or "frequency" in entities:
+            return "ADD_RECURRING"
+        else:
+            return "ADD_EXPENSE"
+    
+    if "start_date" in entities and "end_date" in entities:
+        return "LIST_TRANSACTIONS"
+    
+    if "transaction_id" in entities:
+        if any(key.startswith("update_") for key in entities):
+            return "UPDATE_TRANSACTION"
+        else:
+            return "DELETE_TRANSACTION"
+    
+    # Se não conseguir determinar, usa ADD_EXPENSE como fallback
+    return "ADD_EXPENSE"
+
+async def _process_intent(self, user_id: UUID, intent: str, entities: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Processa uma intenção específica com as entidades fornecidas.
+    
+    Args:
+        user_id: ID do usuário
+        intent: Intenção identificada
+        entities: Dicionário de entidades extraídas
+        
+    Returns:
+        Resultado do processamento
+    """
+    # Reusa a lógica existente, mas separada para facilitar o reuso
+    if intent == "ADD_EXPENSE":
+        return await self._handle_add_expense(user_id, entities)
+    elif intent == "ADD_INCOME":
+        return await self._handle_add_income(user_id, entities)
+    elif intent == "ADD_RECURRING":
+        return await self._handle_add_recurring(user_id, entities)
+    elif intent == "ADD_INSTALLMENT":
+        return await self._handle_add_installment(user_id, entities)
+    elif intent == "LIST_TRANSACTIONS":
+        return await self._handle_list_transactions(user_id, entities)
+    elif intent == "LIST_RECURRING":
+        return await self._handle_list_recurring(user_id, entities)
+    elif intent == "LIST_INSTALLMENTS":
+        return await self._handle_list_installments(user_id, entities)
+    elif intent == "GET_BALANCE":
+        return await self._handle_get_balance(user_id, entities)
+    elif intent == "DELETE_TRANSACTION":
+        return await self._handle_delete_transaction(user_id, entities)
+    elif intent == "UPDATE_TRANSACTION":
+        return await self._handle_update_transaction(user_id, entities)
+    elif intent == "ADD_CATEGORY":
+        return await self._handle_add_category(entities)
+    elif intent == "LIST_CATEGORIES":
+        return await self._handle_list_categories(entities)
+    elif intent == "HELP":
+        return self._get_help_message()
+    else:
+        return {"status": "error", "message": "Comando não reconhecido. Digite 'ajuda' para ver os comandos disponíveis."}
+
+async def generate_report(self, user_id: UUID, report_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Gera um relatório com base nos parâmetros fornecidos.
+    
+    Args:
+        user_id: ID do usuário
+        report_type: Tipo de relatório (mensal, categoria, tendência)
+        params: Parâmetros específicos do relatório
+        
+    Returns:
+        Dados do relatório
+    """
+    if not self.analytics_usecases:
+        return {
+            "status": "error",
+            "message": "Funcionalidade de relatórios não disponível."
+        }
+    
+    try:
+        if report_type == "monthly":
+            # Relatório mensal
+            year = params.get("year", datetime.now().year)
+            month = params.get("month", datetime.now().month)
+            report = await self.analytics_usecases.generate_monthly_report(user_id, year, month)
+            
+            # Formata a saída para exibição amigável
+            result = f"📊 *Relatório Mensal - {report['month']}*\n\n"
+            result += f"💰 *Resumo*\n"
+            result += f"Receitas: R$ {report['summary']['total_income']:.2f}\n"
+            result += f"Despesas: R$ {report['summary']['total_expense']:.2f}\n"
+            result += f"Saldo: R$ {report['summary']['balance']:.2f}\n"
+            result += f"Taxa de economia: {report['summary']['save_rate']:.2f}%\n\n"
+            
+            result += f"📈 *Categorias Principais*\n"
+            for i, (category, data) in enumerate(list(report['categories'].items())[:5]):
+                result += f"{i+1}. {category}: R$ {data['expense']:.2f} ({data.get('expense_percentage', 0):.1f}%)\n"
+            
+            return {
+                "status": "success",
+                "message": result,
+                "data": report
+            }
+            
+        elif report_type == "category":
+            # Relatório por categoria
+            start_date = params.get("start_date")
+            end_date = params.get("end_date")
+            
+            spending = await self.analytics_usecases.get_spending_by_category(user_id, start_date, end_date)
+            
+            period_desc = ""
+            if start_date and end_date:
+                period_desc = f" ({start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')})"
+            
+            result = f"📊 *Gastos por Categoria{period_desc}*\n\n"
+            
+            for i, category in enumerate(spending):
+                result += f"{i+1}. {category['category']}: R$ {category['amount']:.2f} ({category['percentage']:.1f}%)\n"
+            
+            return {
+                "status": "success",
+                "message": result,
+                "data": {"categories": spending}
+            }
+            
+        elif report_type == "trends":
+            # Relatório de tendências
+            months = params.get("months", 6)
+            trends = await self.analytics_usecases.identify_trends(user_id, months)
+            
+            result = f"📊 *Análise de Tendências - Últimos {months} meses*\n\n"
+            
+            result += "📈 *Tendências Gerais*\n"
+            for trend_type, data in trends["trends"].items():
+                direction = "↑" if data["direction"] == "up" else "↓" if data["direction"] == "down" else "→"
+                result += f"{trend_type.capitalize()}: {direction} {data['percentage']:.1f}%\n"
+            
+            result += "\n📉 *Tendências por Categoria*\n"
+            for i, category in enumerate(trends["category_trends"][:5]):
+                direction = "↑" if category["direction"] == "up" else "↓"
+                result += f"{i+1}. {category['category']}: {direction} {category['strength']:.1f}%\n"
+            
+            return {
+                "status": "success",
+                "message": result,
+                "data": trends
+            }
+            
+        elif report_type == "budget":
+            # Sugestão de orçamento
+            budget = await self.analytics_usecases.suggest_budget(user_id)
+            
+            result = f"💼 *Sugestão de Orçamento*\n\n"
+            result += f"Renda Mensal: R$ {budget['monthly_income']:.2f}\n\n"
+            
+            result += "🎯 *Distribuição Ideal*\n"
+            result += f"Essenciais: R$ {budget['ideal']['essential_expenses']:.2f} (50%)\n"
+            result += f"Não-essenciais: R$ {budget['ideal']['non_essential_expenses']:.2f} (30%)\n"
+            result += f"Economias: R$ {budget['ideal']['savings']:.2f} (20%)\n\n"
+            
+            result += "💸 *Sugestão por Categoria*\n"
+            for i, (category, amount) in enumerate(list(budget['suggested_budget'].items())[:5]):
+                result += f"{i+1}. {category}: R$ {amount:.2f}\n"
+            
+            result += f"\n💭 *Dica:* {budget['message']}"
+            
+            return {
+                "status": "success",
+                "message": result,
+                "data": budget
+            }
+            
+        else:
+            return {
+                "status": "error",
+                "message": "Tipo de relatório não reconhecido."
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Erro ao gerar relatório: {str(e)}"
+        }

@@ -26,7 +26,7 @@ class WhatsAppThreadManager:
         self.lock = asyncio.Lock()
         
         # Inicia a tarefa de limpeza
-        self._start_cleanup_task()
+        self._start_cleanup_task()    
     
     async def get_user_queue(self, phone_number: str) -> asyncio.Queue:
         """
@@ -159,3 +159,26 @@ def get_thread_manager() -> WhatsAppThreadManager:
     if _thread_manager is None:
         _thread_manager = WhatsAppThreadManager()
     return _thread_manager
+
+def is_greeting(text: str) -> bool:
+        """
+        Verifica se um texto é uma saudação comum.
+        
+        Args:
+            text: Texto a ser verificado
+            
+        Returns:
+            True se o texto for uma saudação, False caso contrário
+        """
+        # Lista de saudações comuns em português
+        greetings = [
+            "olá", "ola", "oi", "e aí", "e ai", "eai", "hello", "hi", "hey",
+            "oi tudo bem", "olá tudo bem", "bom dia", "boa tarde", "boa noite",
+            "tudo bem", "como vai", "prazer", "saudações"
+        ]
+        
+        # Normaliza o texto (remove espaços extras, converte para minúsculas)
+        normalized = text.lower().strip()
+        
+        # Verifica se o texto contém alguma saudação
+        return normalized in greetings or any(greeting in normalized for greeting in greetings)

@@ -12,7 +12,7 @@ from uuid import UUID
 from src.application.usecases.nlp_usecases import NLPUseCases
 from src.application.usecases.whatsapp_contact_usecases import WhatsAppContactUseCases
 from src.interfaces.api.dependencies import get_nlp_usecases, get_whatsapp_contact_usecases
-from src.infrastructure.whatsapp.thread_manager import get_thread_manager
+from src.infrastructure.whatsapp.thread_manager import get_thread_manager, is_greeting
 from config import settings
 
 # Constante para API key (em produção, usar variáveis de ambiente)
@@ -97,6 +97,36 @@ async def process_whatsapp_message(
     """
     # Formata o número de telefone (remove espaços, símbolos etc.)
     phone_number = ''.join(filter(str.isdigit, request.phone_number))
+
+    if is_greeting(request.command):
+        try:
+            # Verifica se o contato já existe para personalizar a saudação
+            contact = await whatsapp_contact_usecases.get_contact_by_phone(phone_number)
+            name_part = f", {contact.name}" if contact and contact.name else ""
+            
+            # Personaliza a mensagem de boas-vindas
+            welcome_message = (
+                f"👋 *Olá{name_part}!*\n\n"
+                f"Bem-vindo ao Financial Tracker! Como posso ajudar hoje?\n\n"
+                f"Você pode me pedir para:\n"
+                f"• Registrar despesas e receitas\n"
+                f"• Verificar seu saldo atual\n"
+                f"• Listar suas transações recentes\n"
+                f"• E muito mais!\n\n"
+                f"Digite *ajuda* para ver todos os comandos disponíveis."
+            )
+            
+            # Se o contato existe, atualiza última interação
+            if contact:
+                await whatsapp_contact_usecases.update_last_interaction(phone_number)
+            
+            return WhatsAppResponse(
+                status="success",
+                message=welcome_message
+            )
+        except Exception as e:
+            # Se ocorrer algum erro ao processar a saudação, continua com o fluxo normal
+            print(f"Erro ao processar saudação: {str(e)}")
     
     # Obtém o gerenciador de threads
     thread_manager = get_thread_manager()
